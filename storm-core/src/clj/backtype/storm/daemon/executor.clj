@@ -437,7 +437,7 @@
                   (tuple-action-fn task-id tuple)
                   ;; null task ids are broadcast tuples
                   (fast-list-iter [task-id task-ids]
-                    (tuple-action-fn task-id tuple))))))))))
+                    (tuple-action-fn task-id tuple)))))))))))
 
 (defn executor-max-spout-pending [storm-conf num-tasks]
   (let [p (storm-conf TOPOLOGY-MAX-SPOUT-PENDING)]

@@ -39,7 +39,7 @@
     </dependencies>
 
     <build>
-        <finalName>apache-storm-${project.version}</finalName>
+        <finalName>apache-storm-mvad-${project.version}</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

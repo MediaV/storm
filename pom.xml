@@ -26,7 +26,7 @@
 
 
     <groupId>org.apache.storm</groupId>
-    <artifactId>storm-mvad</artifactId>
+    <artifactId>storm</artifactId>
     <version>0.10.0</version>
     <packaging>pom</packaging>
     <name>Storm</name>

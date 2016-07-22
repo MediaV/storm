@@ -53,7 +53,7 @@ public class KryoTupleDeserializer implements ITupleDeserializer {
             MessageId id = MessageId.deserialize(_kryoInput);
             List<Object> values = _kryo.deserializeFrom(_kryoInput);
             return new TupleImpl(_context, values, taskId, streamName, id);
-        } catch(IOException e) {
+        } catch(Exception e) {
             LOG.error("Failed to deserialize message.", e);
             return null;
         }

@@ -26,7 +26,9 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
+
     <artifactId>storm-kafka-client</artifactId>
+    <version>1.0.2</version>
     <name>storm-kafka-client</name>
 
     <packaging>jar</packaging>

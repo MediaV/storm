@@ -27,8 +27,9 @@
     </parent>
 
 
+    <groupId>com.mvad</groupId>
     <artifactId>storm-kafka-client</artifactId>
-    <version>1.0.2</version>
+    <version>mvad-1.0.2-SNAPSHOT</version>
     <name>storm-kafka-client</name>
 
     <packaging>jar</packaging>

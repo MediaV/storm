@@ -47,6 +47,10 @@ public class KafkaSpoutStreamsNamedTopics implements KafkaSpoutStreams {
         LOG.debug("Built {}", this);
     }
 
+    public KafkaSpoutStreamsNamedTopics(Map<String, KafkaSpoutStream> topicToStream) {
+        this.topicToStream = topicToStream;
+    }
+
     /**
      * @param topic the topic for which to get output fields
      * @return the declared output fields

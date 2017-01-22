@@ -545,6 +545,18 @@
             <name>Storm Website</name>
             <url>file:///tmp/site</url>
         </site>
+        <repository>
+            <id>mediav-releases</id>
+            <name>Releases Repository</name>
+            <url>https://maven.corp.mediav.com/nexus/content/repositories/releases/</url>
+            <layout>default</layout>
+        </repository>
+        <snapshotRepository>
+            <id>mediav-snapshots</id>
+            <name>Snapshots Repository</name>
+            <url>https://maven.corp.mediav.com/nexus/content/repositories/snapshots/</url>
+            <layout>default</layout>
+        </snapshotRepository>
     </distributionManagement>
 
     <dependencyManagement>

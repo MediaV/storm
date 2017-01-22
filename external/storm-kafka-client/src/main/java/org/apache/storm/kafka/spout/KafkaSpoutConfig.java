@@ -84,7 +84,7 @@ public class KafkaSpoutConfig<K, V> implements Serializable {
     private final KafkaSpoutTuplesBuilder<K, V> tuplesBuilder;
     private final KafkaSpoutRetryService retryService;
 
-    private KafkaSpoutConfig(Builder<K,V> builder) {
+    public KafkaSpoutConfig(Builder<K,V> builder) {
         this.kafkaProps = setDefaultsAndGetKafkaProps(builder.kafkaProps);
         this.keyDeserializer = builder.keyDeserializer;
         this.valueDeserializer = builder.valueDeserializer;

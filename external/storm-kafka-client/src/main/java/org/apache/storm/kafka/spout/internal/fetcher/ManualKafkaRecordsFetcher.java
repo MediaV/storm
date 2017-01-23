@@ -78,12 +78,10 @@ public class ManualKafkaRecordsFetcher<K, V> implements KafkaRecordsFetcher<K, V
         }
 
         if (!myPartitions.equals(curPartitions) && myPartitions!=null) {
+            myPartitions = curPartitions;
+            consumer.assign(myPartitions);
             partitionAssignmentChangeListener.onPartitionAssignmentChange(myPartitions, curPartitions);
         }
-
-        myPartitions = curPartitions;
-
-        consumer.assign(myPartitions);
     }
 
     @Override

@@ -332,12 +332,12 @@ public class KafkaSpout<K, V> extends BaseRichSpout {
             boolean isScheduled = retryService.isScheduled(msgId);
             if (!isScheduled || retryService.isReady(msgId)) {   // not scheduled <=> never failed (i.e. never emitted) or ready to be retried
                 final List<Object> tuple = tuplesBuilder.buildTuple(record);
-                kafkaSpoutStreams.emit(collector, tuple, msgId);
                 emitted.add(msgId);
                 numUncommittedOffsets++;
                 if (isScheduled) { // Was scheduled for retry, now being re-emitted. Remove from schedule.
                     retryService.remove(msgId);
                 }
+                kafkaSpoutStreams.emit(collector, tuple, msgId);
                 LOG.trace("Emitted tuple [{}] for record [{}]", tuple, record);
                 return true;
             }

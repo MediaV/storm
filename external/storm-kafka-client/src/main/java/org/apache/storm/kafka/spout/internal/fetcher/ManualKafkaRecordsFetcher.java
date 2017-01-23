@@ -81,7 +81,7 @@ public class ManualKafkaRecordsFetcher<K, V> implements KafkaRecordsFetcher<K, V
         }
 
         if (!myPartitions.equals(curPartitions) && myPartitions!=null) {
-            LOGGER.info("Partitions changeed, old partitions: {}, new partitions: {}", myPartitions, curPartitions);
+            LOGGER.info("Partitions changed, old partitions: {}, new partitions: {}", myPartitions, curPartitions);
             consumer.assign(curPartitions);
             partitionAssignmentChangeListener.onPartitionAssignmentChange(myPartitions, curPartitions);
             myPartitions = curPartitions;

@@ -25,6 +25,8 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.storm.kafka.spout.internal.Timer;
 import org.apache.storm.kafka.spout.internal.partition.KafkaPartitionReader;
 import org.apache.storm.kafka.spout.TopicPartitionComparator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -35,6 +37,7 @@ import java.util.Set;
 
 public class ManualKafkaRecordsFetcher<K, V> implements KafkaRecordsFetcher<K, V> {
     private static final Comparator<TopicPartition> KAFKA_TOPIC_PARTITION_COMPARATOR = new TopicPartitionComparator();
+    private static final Logger LOGGER = LoggerFactory.getLogger(ManualKafkaRecordsFetcher.class);
 
     private final KafkaConsumer<K, V> consumer;
     private final int thisTaskIndex;
@@ -78,9 +81,10 @@ public class ManualKafkaRecordsFetcher<K, V> implements KafkaRecordsFetcher<K, V
         }
 
         if (!myPartitions.equals(curPartitions) && myPartitions!=null) {
-            myPartitions = curPartitions;
-            consumer.assign(myPartitions);
+            LOGGER.info("Partitions changeed, old partitions: {}, new partitions: {}", myPartitions, curPartitions);
+            consumer.assign(curPartitions);
             partitionAssignmentChangeListener.onPartitionAssignmentChange(myPartitions, curPartitions);
+            myPartitions = curPartitions;
         }
     }
 

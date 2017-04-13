@@ -34,12 +34,13 @@ public class KafkaTridentSpoutOpaqueCoordinator<K,V> implements IOpaquePartition
 
     public KafkaTridentSpoutOpaqueCoordinator(KafkaTridentSpoutManager<K, V> kafkaManager) {
         this.kafkaManager = kafkaManager;
+        kafkaManager.createAndSubscribeKafkaConsumer(null);
         LOG.debug("Created {}", this);
     }
 
     @Override
     public boolean isReady(long txid) {
-        LOG.debug("isReady = true");
+        LOG.debug("i${project.version}sReady = true");
         return true;    // the "old" trident kafka spout always returns true, like this
     }
 

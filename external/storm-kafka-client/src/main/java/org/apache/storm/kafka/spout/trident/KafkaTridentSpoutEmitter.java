@@ -21,11 +21,10 @@ package org.apache.storm.kafka.spout.trident;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.storm.kafka.spout.KafkaSpoutConfig;
 import org.apache.storm.kafka.spout.RecordTranslator;
-import org.apache.storm.kafka.spout.internal.Timer;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.trident.operation.TridentCollector;
 import org.apache.storm.trident.spout.IOpaquePartitionedTridentSpout;
@@ -34,18 +33,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
 
-import static org.apache.storm.kafka.spout.KafkaSpoutConfig.FirstPollOffsetStrategy.EARLIEST;
-import static org.apache.storm.kafka.spout.KafkaSpoutConfig.FirstPollOffsetStrategy.LATEST;
-import static org.apache.storm.kafka.spout.KafkaSpoutConfig.FirstPollOffsetStrategy.UNCOMMITTED_EARLIEST;
-import static org.apache.storm.kafka.spout.KafkaSpoutConfig.FirstPollOffsetStrategy.UNCOMMITTED_LATEST;
+import static org.apache.storm.kafka.spout.KafkaSpoutConfig.FirstPollOffsetStrategy.*;
 
 public class KafkaTridentSpoutEmitter<K, V> implements IOpaquePartitionedTridentSpout.Emitter<
         List<TopicPartition>,
@@ -61,35 +51,24 @@ public class KafkaTridentSpoutEmitter<K, V> implements IOpaquePartitionedTrident
 
     // Bookkeeping
     private final KafkaTridentSpoutManager<K, V> kafkaManager;
-    private Set<TopicPartition> firstPoll = new HashSet<>();        // set of topic-partitions for which first poll has already occurred
 
     // Declare some KafkaTridentSpoutManager references for convenience
     private final long pollTimeoutMs;
     private final KafkaSpoutConfig.FirstPollOffsetStrategy firstPollOffsetStrategy;
     private final RecordTranslator<K, V> translator;
-    private final Timer refreshSubscriptionTimer;
 
     private TopologyContext topologyContext;
 
-    public KafkaTridentSpoutEmitter(KafkaTridentSpoutManager<K, V> kafkaManager, TopologyContext topologyContext, Timer refreshSubscriptionTimer) {
-        this.kafkaConsumer = kafkaManager.createAndSubscribeKafkaConsumer(topologyContext);
+    public KafkaTridentSpoutEmitter(KafkaTridentSpoutManager<K, V> kafkaManager, TopologyContext topologyContext) {
+        this.kafkaConsumer = kafkaManager.createKafkaConsumer();
         this.kafkaManager = kafkaManager;
         this.topologyContext = topologyContext;
-        this.refreshSubscriptionTimer = refreshSubscriptionTimer;
         this.translator = kafkaManager.getKafkaSpoutConfig().getTranslator();
 
         final KafkaSpoutConfig<K, V> kafkaSpoutConfig = kafkaManager.getKafkaSpoutConfig();
         this.pollTimeoutMs = kafkaSpoutConfig.getPollTimeoutMs();
         this.firstPollOffsetStrategy = kafkaSpoutConfig.getFirstPollOffsetStrategy();
         LOG.debug("Created {}", this);
-    }
-
-    /**
-     * Creates instance of this class with default 500 millisecond refresh subscription timer
-     */
-    public KafkaTridentSpoutEmitter(KafkaTridentSpoutManager<K, V> kafkaManager, TopologyContext topologyContext) {
-        this(kafkaManager, topologyContext, new Timer(500,
-                kafkaManager.getKafkaSpoutConfig().getPartitionRefreshPeriodMs(), TimeUnit.MILLISECONDS));
     }
 
     @Override
@@ -100,42 +79,27 @@ public class KafkaTridentSpoutEmitter<K, V> implements IOpaquePartitionedTrident
                 tx, currBatchPartition, lastBatch, collector);
 
         final TopicPartition currBatchTp = currBatchPartition.getTopicPartition();
-        final Set<TopicPartition> assignments = kafkaConsumer.assignment();
+
+        kafkaConsumer.assign(Collections.singleton(currBatchTp));
         KafkaTridentSpoutBatchMetadata<K, V> currentBatch = lastBatch;
-        Collection<TopicPartition> pausedTopicPartitions = Collections.emptySet();
 
-        if (assignments == null || !assignments.contains(currBatchPartition.getTopicPartition())) {
-            LOG.warn("SKIPPING processing batch [transaction = {}], [currBatchPartition = {}], [lastBatchMetadata = {}], " +
-                            "[collector = {}] because it is not part of the assignments {} of consumer instance [{}] " +
-                            "of consumer group [{}]", tx, currBatchPartition, lastBatch, collector, assignments,
-                    kafkaConsumer, kafkaManager.getKafkaSpoutConfig().getConsumerGroupId());
-        } else {
-            try {
-                // pause other topic-partitions to only poll from current topic-partition
-                pausedTopicPartitions = pauseTopicPartitions(currBatchTp);
 
-                seek(currBatchTp, lastBatch);
+        try {
+            seek(currBatchTp, lastBatch);
 
-                // poll
-                if (refreshSubscriptionTimer.isExpiredResetOnTrue()) {
-                    kafkaManager.getKafkaSpoutConfig().getSubscription().refreshAssignment();
-                }
+            final ConsumerRecords<K, V> records = kafkaConsumer.poll(pollTimeoutMs);
+            LOG.debug("Polled [{}] records from Kafka.", records.count());
 
-                final ConsumerRecords<K, V> records = kafkaConsumer.poll(pollTimeoutMs);
-                LOG.debug("Polled [{}] records from Kafka.", records.count());
-
-                if (!records.isEmpty()) {
-                    emitTuples(collector, records);
-                    // build new metadata
-                    currentBatch = new KafkaTridentSpoutBatchMetadata<>(currBatchTp, records, lastBatch);
-                }
-            } finally {
-                kafkaConsumer.resume(pausedTopicPartitions);
-                LOG.trace("Resumed topic-partitions {}", pausedTopicPartitions);
+            if (!records.isEmpty()) {
+                emitTuples(collector, records);
+                // build new metadata
+                currentBatch = new KafkaTridentSpoutBatchMetadata<>(currBatchTp, records, lastBatch);
             }
-            LOG.debug("Emitted batch: [transaction = {}], [currBatchPartition = {}], [lastBatchMetadata = {}], " +
-                    "[currBatchMetadata = {}], [collector = {}]", tx, currBatchPartition, lastBatch, currentBatch, collector);
+        } catch (KafkaException e) {
+            LOG.error("Failed to fetch records.", e);
         }
+        LOG.debug("Emitted batch: [transaction = {}], [currBatchPartition = {}], [lastBatchMetadata = {}], " +
+                "[currBatchMetadata = {}], [collector = {}]", tx, currBatchPartition, lastBatch, currentBatch, collector);
 
         return currentBatch;
     }
@@ -161,44 +125,17 @@ public class KafkaTridentSpoutEmitter<K, V> implements IOpaquePartitionedTrident
         if (lastBatchMeta != null) {
             kafkaConsumer.seek(tp, lastBatchMeta.getLastOffset() + 1);  // seek next offset after last offset from previous batch
             LOG.debug("Seeking fetch offset to next offset after last offset from previous batch for topic-partition [{}]", tp);
-        } else if (isFirstPoll(tp)) {
+        } else {
             LOG.debug("Seeking fetch offset from firstPollOffsetStrategy and last commit to Kafka for topic-partition [{}]", tp);
-            firstPoll.add(tp);
-            final OffsetAndMetadata committedOffset = kafkaConsumer.committed(tp);
-            if (committedOffset != null) {             // offset was committed for this TopicPartition
-                if (firstPollOffsetStrategy.equals(EARLIEST)) {
-                    kafkaConsumer.seekToBeginning(Collections.singleton(tp));
-                } else if (firstPollOffsetStrategy.equals(LATEST)) {
-                    kafkaConsumer.seekToEnd(Collections.singleton(tp));
-                } else {
-                    // By default polling starts at the last committed offset. +1 to point fetch to the first uncommitted offset.
-                    kafkaConsumer.seek(tp, committedOffset.offset() + 1);
-                }
-            } else {    // no commits have ever been done, so start at the beginning or end depending on the strategy
-                if (firstPollOffsetStrategy.equals(EARLIEST) || firstPollOffsetStrategy.equals(UNCOMMITTED_EARLIEST)) {
-                    kafkaConsumer.seekToBeginning(Collections.singleton(tp));
-                } else if (firstPollOffsetStrategy.equals(LATEST) || firstPollOffsetStrategy.equals(UNCOMMITTED_LATEST)) {
-                    kafkaConsumer.seekToEnd(Collections.singleton(tp));
-                }
+            if (firstPollOffsetStrategy.equals(EARLIEST) || firstPollOffsetStrategy.equals(UNCOMMITTED_EARLIEST)) {
+                kafkaConsumer.seekToBeginning(Collections.singleton(tp));
+            } else if (firstPollOffsetStrategy.equals(LATEST) || firstPollOffsetStrategy.equals(UNCOMMITTED_LATEST)) {
+                kafkaConsumer.seekToEnd(Collections.singleton(tp));
             }
         }
         final long fetchOffset = kafkaConsumer.position(tp);
         LOG.debug("Set [fetchOffset = {}]", fetchOffset);
         return fetchOffset;
-    }
-
-    private boolean isFirstPoll(TopicPartition tp) {
-         return !firstPoll.contains(tp);
-    }
-
-    // returns paused topic-partitions.
-    private Collection<TopicPartition> pauseTopicPartitions(TopicPartition excludedTp) {
-        final Set<TopicPartition> pausedTopicPartitions = new HashSet<>(kafkaConsumer.assignment());
-        LOG.debug("Currently assigned topic-partitions {}", pausedTopicPartitions);
-        pausedTopicPartitions.remove(excludedTp);
-        kafkaConsumer.pause(pausedTopicPartitions);
-        LOG.debug("Paused topic-partitions {}", pausedTopicPartitions);
-        return pausedTopicPartitions;
     }
 
     @Override

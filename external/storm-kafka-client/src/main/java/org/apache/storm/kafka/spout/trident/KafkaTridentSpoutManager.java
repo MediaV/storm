@@ -50,10 +50,14 @@ public class KafkaTridentSpoutManager<K, V> implements Serializable {
     }
 
     KafkaConsumer<K,V> createAndSubscribeKafkaConsumer(TopologyContext context) {
-        kafkaConsumer = new KafkaConsumer<>(kafkaSpoutConfig.getKafkaProps(),
-                kafkaSpoutConfig.getKeyDeserializer(), kafkaSpoutConfig.getValueDeserializer());
-
+        createKafkaConsumer();
         kafkaSpoutConfig.getSubscription().subscribe(kafkaConsumer, new KafkaSpoutConsumerRebalanceListener(), context);
+        return kafkaConsumer;
+    }
+
+    KafkaConsumer<K, V> createKafkaConsumer() {
+        kafkaConsumer = new KafkaConsumer<>(kafkaSpoutConfig.getKafkaProps(),
+            kafkaSpoutConfig.getKeyDeserializer(), kafkaSpoutConfig.getValueDeserializer());
         return kafkaConsumer;
     }
 
@@ -62,7 +66,7 @@ public class KafkaTridentSpoutManager<K, V> implements Serializable {
     }
 
     Set<TopicPartition> getTopicPartitions() {
-        return KafkaTridentSpoutTopicPartitionRegistry.INSTANCE.getTopicPartitions();
+        return kafkaConsumer.assignment();
     }
 
     Fields getFields() {
@@ -101,12 +105,10 @@ public class KafkaTridentSpoutManager<K, V> implements Serializable {
         public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
             LOG.info("Partitions revoked. [consumer-group={}, consumer={}, topic-partitions={}]",
                     kafkaSpoutConfig.getConsumerGroupId(), kafkaConsumer, partitions);
-            KafkaTridentSpoutTopicPartitionRegistry.INSTANCE.removeAll(partitions);
         }
 
         @Override
         public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
-            KafkaTridentSpoutTopicPartitionRegistry.INSTANCE.addAll(partitions);
             LOG.info("Partitions reassignment. [consumer-group={}, consumer={}, topic-partitions={}]",
                     kafkaSpoutConfig.getConsumerGroupId(), kafkaConsumer, partitions);
         }
